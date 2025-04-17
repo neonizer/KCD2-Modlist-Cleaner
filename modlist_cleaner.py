@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import re
@@ -77,7 +76,8 @@ def show_help():
 root = tk.Tk()
 root.title("Kingdom Come Modlist Remover Tool")
 root.geometry("750x300")
-root.resizable(False, False)
+root.minsize(600, 250)
+root.resizable(True, True)
 
 # Menu bar
 menu_bar = tk.Menu(root)
@@ -86,34 +86,36 @@ help_menu.add_command(label="How to Use", command=show_help)
 menu_bar.add_cascade(label="Help", menu=help_menu)
 root.config(menu=menu_bar)
 
-# Layout
+# Frame with grid layout
 frame = tk.Frame(root, padx=10, pady=10)
-frame.pack(expand=True, fill="both")
+frame.pack(fill="both", expand=True)
 
-def create_row(label_text, entry_var, browse_command):
-    row = tk.Frame(frame)
-    label = tk.Label(row, text=label_text, width=48, anchor='w')
-    entry = tk.Entry(row, textvariable=entry_var, width=40)
-    button = tk.Button(row, text="Browse", command=browse_command)
+frame.grid_columnconfigure(0, weight=2)
+frame.grid_columnconfigure(1, weight=5)
+frame.grid_columnconfigure(2, weight=1)
 
-    label.pack(side=tk.LEFT)
-    entry.pack(side=tk.LEFT, padx=5)
-    button.pack(side=tk.LEFT)
-    row.pack(pady=5)
+def create_row(row, label_text, entry_var, browse_command):
+    label = tk.Label(frame, text=label_text, anchor='w')
+    label.grid(row=row, column=0, sticky="nsew", padx=5, pady=5)
+
+    entry = tk.Entry(frame, textvariable=entry_var)
+    entry.grid(row=row, column=1, sticky="nsew", padx=5, pady=5)
+
+    button = tk.Button(frame, text="Browse", command=browse_command)
+    button.grid(row=row, column=2, sticky="nsew", padx=5, pady=5)
+
+    return entry
 
 target_var = tk.StringVar()
 output_var = tk.StringVar()
 
-create_row("Target Save (<modlist> will be cleared):", target_var, lambda: browse_file(target_entry, update_output=True))
-target_entry = frame.winfo_children()[0].winfo_children()[1]
+target_entry = create_row(0, "Target Save (<UsedMods> will be cleared):", target_var, lambda: browse_file(target_entry, update_output=True))
+output_entry = create_row(1, "Output Save (Default set to same location as Target save):", output_var, lambda: browse_output_file(output_entry))
 
-create_row("Output Save (Default set to same location as Target save):", output_var, lambda: browse_output_file(output_entry))
-output_entry = frame.winfo_children()[1].winfo_children()[1]
-
-# Clear Modlist Button
-transfer_btn = tk.Button(root, text="Run Tool", command=run_tool,
-                         bg="#610000", fg="white", font=("Arial", 15, "bold"),
-                         padx=20, pady=10)
-transfer_btn.pack(pady=20)
+# Run Button
+run_btn = tk.Button(root, text="Run Tool", command=run_tool,
+                    bg="#610000", fg="white", font=("Arial", 15, "bold"),
+                    padx=20, pady=10)
+run_btn.pack(pady=20)
 
 root.mainloop()
