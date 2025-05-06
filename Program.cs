@@ -1,0 +1,133 @@
+using System;
+using System.Drawing;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace ModlistCleanerTray
+{
+    static class Program
+    {
+        private static NotifyIcon trayIcon;
+        private static FileSystemWatcher watcher;
+        private static string basePath;
+        private static bool paused = false;
+
+        [STAThread]
+        static void Main()
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            basePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Saved Games", "kingdomcome2", "saves");
+
+            // Initialize tray icon using embedded ico
+            trayIcon = new NotifyIcon
+            {
+                Icon = new Icon(new MemoryStream(Properties.Resources.save_icon)),
+                Text = "Modlist Cleaner",
+                Visible = true
+            };
+
+            var contextMenu = new ContextMenuStrip();
+
+            var pauseItem = new ToolStripMenuItem("Pause Auto-Clean")
+            {
+                Checked = paused,
+                CheckOnClick = true
+            };
+            pauseItem.CheckedChanged += (s, e) => paused = pauseItem.Checked;
+
+            var cleanAllItem = new ToolStripMenuItem("Clean All Saves Now");
+            cleanAllItem.Click += (s, e) => CleanAllExisting();
+
+            var exitItem = new ToolStripMenuItem("Exit");
+            exitItem.Click += (s, e) => Application.Exit();
+
+            contextMenu.Items.Add(pauseItem);
+            contextMenu.Items.Add(cleanAllItem);
+            contextMenu.Items.Add(exitItem);
+            trayIcon.ContextMenuStrip = contextMenu;
+
+            StartWatching();
+            Application.ApplicationExit += (s, e) => trayIcon.Dispose();
+            Application.Run();
+        }
+
+        private static void StartWatching()
+        {
+            watcher = new FileSystemWatcher(basePath, "*.whs")
+            {
+                IncludeSubdirectories = true,
+                EnableRaisingEvents = true
+            };
+            watcher.Created += OnFileCreated;
+        }
+
+        private static void OnFileCreated(object sender, FileSystemEventArgs e)
+        {
+            if (paused) return;
+            Task.Run(() =>
+            {
+                if (!WaitForFile(e.FullPath, TimeSpan.FromSeconds(5))) return;
+                ProcessFile(e.FullPath);
+            });
+        }
+
+        private static bool WaitForFile(string path, TimeSpan timeout)
+        {
+            var start = DateTime.Now;
+            while ((DateTime.Now - start) < timeout)
+            {
+                try { using var s = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None); return true; }
+                catch (IOException) { Task.Delay(200).Wait(); }
+            }
+            return false;
+        }
+
+        private static void CleanAllExisting()
+        {
+            try
+            {
+                if (!Directory.Exists(basePath)) return;
+                foreach (var playlineDir in Directory.GetDirectories(basePath, "playline*"))
+                {
+                    foreach (var file in Directory.GetFiles(playlineDir, "*.whs"))
+                    {
+                        ProcessFile(file);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void ProcessFile(string path)
+        {
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                uint signature = BitConverter.ToUInt32(bytes, 0);
+                int oldDescLen = BitConverter.ToInt32(bytes, 4);
+                string description = Encoding.UTF8.GetString(bytes, 8, oldDescLen);
+                string cleanedDescription = Regex.Replace(
+                    description,
+                    @"<UsedMods>.*?</UsedMods>",
+                    "<UsedMods></UsedMods>",
+                    RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                byte[] newDescBytes = Encoding.UTF8.GetBytes(cleanedDescription);
+                using var fs = File.Open(path, FileMode.Create, FileAccess.Write);
+                using var writer = new BinaryWriter(fs, Encoding.UTF8);
+                writer.Write(signature);
+                writer.Write(newDescBytes.Length);
+                writer.Write(newDescBytes);
+                int remainingStart = 8 + oldDescLen;
+                writer.Write(bytes, remainingStart, bytes.Length - remainingStart);
+            }
+            catch { }
+        }
+    }
+}
