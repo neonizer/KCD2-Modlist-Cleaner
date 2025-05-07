@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace SaveCleanerTray
+namespace ModlistCleanerTray
 {
     static class Program
     {
@@ -15,7 +15,7 @@ namespace SaveCleanerTray
         private static FileSystemWatcher watcher;
         private static string basePath;
         private static bool paused = false;
-        private static string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SaveCleanerTray.log");
+        private static string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ModlistCleanerTray.log");
 
         [STAThread]
         static void Main()
@@ -33,8 +33,8 @@ namespace SaveCleanerTray
 
                 trayIcon = new NotifyIcon
                 {
-                    Icon = new Icon(new MemoryStream(ModlistCleanerTray.Properties.Resources.save_icon)),
-                    Text = "Save Cleaner",
+                    Icon = new Icon(new MemoryStream(Properties.Resources.save_icon)),
+                    Text = "Modlist Cleaner",
                     Visible = true
                 };
 
@@ -65,7 +65,7 @@ namespace SaveCleanerTray
             catch (Exception ex)
             {
                 Log($"Critical error: {ex.Message}\n{ex.StackTrace}");
-                MessageBox.Show("A critical error occurred. Please check the log file.", "Save Cleaner Tray Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("A critical error occurred. Please check the log file.", "Modlist Cleaner Tray Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
