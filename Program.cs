@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Text;
@@ -6,7 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace ModlistCleanerTray
+namespace SaveCleanerTray
 {
     static class Program
     {
@@ -14,58 +15,76 @@ namespace ModlistCleanerTray
         private static FileSystemWatcher watcher;
         private static string basePath;
         private static bool paused = false;
+        private static string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SaveCleanerTray.log");
 
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
-            basePath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Saved Games", "kingdomcome2", "saves");
-
-            // Initialize tray icon using embedded ico
-            trayIcon = new NotifyIcon
+            try
             {
-                Icon = new Icon(new MemoryStream(Properties.Resources.save_icon)),
-                Text = "Modlist Cleaner",
-                Visible = true
-            };
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
 
-            var contextMenu = new ContextMenuStrip();
+                basePath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Saved Games", "kingdomcome2", "saves");
 
-            var pauseItem = new ToolStripMenuItem("Pause Auto-Clean")
+                Log("Application started.");
+
+                trayIcon = new NotifyIcon
+                {
+                    Icon = new Icon(new MemoryStream(ModlistCleanerTray.Properties.Resources.save_icon)),
+                    Text = "Save Cleaner",
+                    Visible = true
+                };
+
+                var contextMenu = new ContextMenuStrip();
+
+                var pauseItem = new ToolStripMenuItem("Pause Auto-Clean")
+                {
+                    Checked = paused,
+                    CheckOnClick = true
+                };
+                pauseItem.CheckedChanged += (s, e) => paused = pauseItem.Checked;
+
+                var cleanAllItem = new ToolStripMenuItem("Clean All Saves Now");
+                cleanAllItem.Click += (s, e) => CleanAllExisting();
+
+                var exitItem = new ToolStripMenuItem("Exit");
+                exitItem.Click += (s, e) => Application.Exit();
+
+                contextMenu.Items.Add(pauseItem);
+                contextMenu.Items.Add(cleanAllItem);
+                contextMenu.Items.Add(exitItem);
+                trayIcon.ContextMenuStrip = contextMenu;
+
+                StartWatching();
+                Application.ApplicationExit += (s, e) => trayIcon.Dispose();
+                Application.Run();
+            }
+            catch (Exception ex)
             {
-                Checked = paused,
-                CheckOnClick = true
-            };
-            pauseItem.CheckedChanged += (s, e) => paused = pauseItem.Checked;
-
-            var cleanAllItem = new ToolStripMenuItem("Clean All Saves Now");
-            cleanAllItem.Click += (s, e) => CleanAllExisting();
-
-            var exitItem = new ToolStripMenuItem("Exit");
-            exitItem.Click += (s, e) => Application.Exit();
-
-            contextMenu.Items.Add(pauseItem);
-            contextMenu.Items.Add(cleanAllItem);
-            contextMenu.Items.Add(exitItem);
-            trayIcon.ContextMenuStrip = contextMenu;
-
-            StartWatching();
-            Application.ApplicationExit += (s, e) => trayIcon.Dispose();
-            Application.Run();
+                Log($"Critical error: {ex.Message}\n{ex.StackTrace}");
+                MessageBox.Show("A critical error occurred. Please check the log file.", "Save Cleaner Tray Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private static void StartWatching()
         {
-            watcher = new FileSystemWatcher(basePath, "*.whs")
+            try
             {
-                IncludeSubdirectories = true,
-                EnableRaisingEvents = true
-            };
-            watcher.Created += OnFileCreated;
+                watcher = new FileSystemWatcher(basePath, "*.whs")
+                {
+                    IncludeSubdirectories = true,
+                    EnableRaisingEvents = true
+                };
+                watcher.Created += OnFileCreated;
+                Log("FileSystemWatcher started.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Failed to start FileSystemWatcher: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         private static void OnFileCreated(object sender, FileSystemEventArgs e)
@@ -73,8 +92,16 @@ namespace ModlistCleanerTray
             if (paused) return;
             Task.Run(() =>
             {
-                if (!WaitForFile(e.FullPath, TimeSpan.FromSeconds(5))) return;
-                ProcessFile(e.FullPath);
+                try
+                {
+                    if (!WaitForFile(e.FullPath, TimeSpan.FromSeconds(5))) return;
+                    ProcessFile(e.FullPath);
+                    Log($"File processed: {e.FullPath}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Error processing file '{e.FullPath}': {ex.Message}\n{ex.StackTrace}");
+                }
             });
         }
 
@@ -99,10 +126,14 @@ namespace ModlistCleanerTray
                     foreach (var file in Directory.GetFiles(playlineDir, "*.whs"))
                     {
                         ProcessFile(file);
+                        Log($"File cleaned during Clean All: {file}");
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log($"Error during Clean All: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         private static void ProcessFile(string path)
@@ -127,7 +158,15 @@ namespace ModlistCleanerTray
                 int remainingStart = 8 + oldDescLen;
                 writer.Write(bytes, remainingStart, bytes.Length - remainingStart);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log($"Error processing file '{path}': {ex.Message}\n{ex.StackTrace}");
+            }
+        }
+
+        private static void Log(string message)
+        {
+            File.AppendAllText(logFile, $"[{DateTime.Now}] {message}\n");
         }
     }
 }
